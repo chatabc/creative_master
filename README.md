@@ -326,6 +326,12 @@ creative_master/
 
 ---
 
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=chatabc/creative_master&type=Date)](https://star-history.com/#chatabc/creative_master&Date)
+
+---
+
 ## 🤝 贡献指南
 
 欢迎贡献代码、报告问题或提出建议！

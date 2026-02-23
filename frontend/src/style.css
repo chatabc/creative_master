@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #213547;
+  background-color: #f8fafc;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+.inspiration-card {
+  @apply bg-white rounded-lg shadow-md p-4 cursor-move transition-all duration-200;
+}
+
+.inspiration-card:hover {
+  @apply shadow-lg scale-105;
+}
+
+.inspiration-card.selected {
+  @apply ring-2 ring-primary-500 ring-offset-2;
+}
+
+.creative-card {
+  @apply bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg p-6 transition-all duration-300;
+}
+
+.creative-card:hover {
+  @apply shadow-xl;
+}
+
+.relation-line {
+  stroke: #64748b;
+  stroke-width: 2;
+  fill: none;
+}
+
+.relation-line.primary {
+  stroke: #8b5cf6;
+  stroke-width: 3;
+}
+
+.relation-line.supportive {
+  stroke: #22c55e;
+  stroke-dasharray: 5, 5;
+}
+
+.btn-primary {
+  @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors;
+}
+
+.input-field {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none;
+}
+
+.tag {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.tag-image { @apply bg-blue-100 text-blue-800; }
+.tag-code { @apply bg-green-100 text-green-800; }
+.tag-text { @apply bg-yellow-100 text-yellow-800; }
+.tag-video { @apply bg-red-100 text-red-800; }
+.tag-audio { @apply bg-purple-100 text-purple-800; }

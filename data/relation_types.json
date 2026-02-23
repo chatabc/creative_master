@@ -1,0 +1,51 @@
+{
+  "142eff14-b9c2-4c01-9a23-8d3ca595211f": {
+    "name": "primary",
+    "display_name": "主从关系",
+    "description": "主从/支持与被支持关系，用箭头表示方向",
+    "style": {
+      "stroke": "#8b5cf6",
+      "strokeWidth": 2,
+      "markerEnd": "arrow"
+    },
+    "id": "142eff14-b9c2-4c01-9a23-8d3ca595211f",
+    "created_at": "2026-02-22T09:39:35.212023"
+  },
+  "75debfaf-a00c-4226-83cb-a05a352652ad": {
+    "name": "parallel",
+    "display_name": "平行关系",
+    "description": "平行关系，用连线表示",
+    "style": {
+      "stroke": "#22c55e",
+      "strokeWidth": 2
+    },
+    "id": "75debfaf-a00c-4226-83cb-a05a352652ad",
+    "created_at": "2026-02-22T09:39:35.212023"
+  },
+  "a4b463c4-f750-4905-9527-ae79f7aafaf1": {
+    "name": "contrast",
+    "display_name": "对比关系",
+    "description": "对比关系，用双箭头表示",
+    "style": {
+      "stroke": "#ef4444",
+      "strokeWidth": 2,
+      "markerEnd": "arrow",
+      "markerStart": "arrow"
+    },
+    "id": "a4b463c4-f750-4905-9527-ae79f7aafaf1",
+    "created_at": "2026-02-22T09:39:35.212023"
+  },
+  "b4bb0e93-fe4e-43c8-b412-c3aa22a81370": {
+    "name": "public",
+    "display_name": "公共关系",
+    "description": "共用资源",
+    "style": {
+      "stroke": "#6b7280",
+      "strokeWidth": 2,
+      "markerEnd": "",
+      "markerStart": ""
+    },
+    "id": "b4bb0e93-fe4e-43c8-b412-c3aa22a81370",
+    "created_at": "2026-02-22T19:43:04.550648"
+  }
+}

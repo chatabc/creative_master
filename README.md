@@ -95,7 +95,6 @@
 
 - **Python** 3.10 或更高版本
 - **Node.js** 18 或更高版本
-- **AI模型API**（OpenAI 兼容接口）
 
 ### 安装步骤
 
@@ -119,25 +118,20 @@ cd frontend
 npm install
 ```
 
-#### 4. 配置环境变量
+#### 4. 配置AI模型
 
-创建 `.env` 文件：
+首次使用时，需要在前端设置页面配置AI模型：
 
-```bash
-cp .env.example .env
-```
+1. 启动应用后访问 http://localhost:3001
+2. 点击左侧菜单「设置」
+3. 在「AI模型配置」区域点击「添加模型」
+4. 填写模型信息：
+   - **名称**：自定义显示名称（如 "GPT-4"）
+   - **模型ID**：如 `gpt-4`、`deepseek-chat`
+   - **API密钥**：你的API密钥
+   - **Base URL**：API端点地址（如 `https://api.openai.com/v1`）
 
-编辑 `.env` 文件，配置你的AI模型API：
-
-```env
-# OpenAI 兼容 API 配置
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1
-
-# 或者使用其他兼容服务
-# OPENAI_BASE_URL=https://api.deepseek.com/v1
-# OPENAI_BASE_URL=https://api.openai-proxy.com/v1
-```
+> 💡 **提示**：支持任何 OpenAI 兼容的 API 服务，如 DeepSeek、通义千问等。
 
 ### 启动服务
 

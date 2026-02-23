@@ -141,13 +141,37 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 
 ### 启动服务
 
-#### 启动后端（端口 8002）
+#### 方式一：使用启动脚本（推荐）
+
+**Windows:**
+```bash
+# 双击运行 start.bat 或在命令行执行
+start.bat
+```
+
+**macOS:**
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+**Linux:**
+```bash
+chmod +x start_linux.sh
+./start_linux.sh
+```
+
+启动脚本会自动打开两个终端窗口分别运行前后端，并在启动完成后自动打开浏览器。
+
+#### 方式二：手动启动
+
+**启动后端（端口 8002）**
 
 ```bash
 python -m uvicorn backend.main:app --port 8002 --reload
 ```
 
-#### 启动前端（端口 3001）
+**启动前端（端口 3001）**
 
 ```bash
 cd frontend

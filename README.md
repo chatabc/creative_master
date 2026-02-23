@@ -1,104 +1,362 @@
-# Creative Master
+# 🎨 Creative Master
 
-一个AI驱动的创意灵感管理工具，帮助用户收集、组织、组合灵感，并生成创意提示词。
+<div align="center">
 
-## 功能特性
+**AI驱动的创意灵感管理工具**
 
-- **灵感管理** - 支持图片、代码、文字、视频、音频、文档、文件夹等多种类型
-- **AI总结** - 自动分析灵感内容并生成摘要
-- **可视化组合** - 拖拽式灵感组合，支持关系定义
-- **创意生成** - 基于灵感组合生成多个创意方案
-- **提示词生成** - 根据创意生成详细的AI提示词
-- **文件聚合** - 将创意相关的源文件聚合到指定文件夹
+收集灵感 → 智能组合 → 生成创意 → 输出提示词
 
-## 快速开始
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![Vue](https://img.shields.io/badge/Vue-3.x-green.svg)](https://vuejs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-teal.svg)](https://fastapi.tiangolo.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[在线演示](#) · [功能特性](#-功能特性) · [快速开始](#-快速开始) · [使用教程](#-使用教程)
+
+</div>
+
+---
+
+## ✨ 项目亮点
+
+你是否遇到过这些问题？
+
+- 📁 灵感素材散落各处，难以管理和查找
+- 🧠 有好的想法却不知道如何组合
+- ✍️ 写提示词时总是遗漏关键信息
+- 🔄 创意工作流程混乱，效率低下
+
+**Creative Master** 就是为解决这些问题而生的！它是一个强大的创意灵感管理工具，帮助你：
+
+- 🗂️ **统一管理** - 图片、代码、文档、视频、音频、文件夹，所有灵感素材一站管理
+- 🤖 **AI赋能** - 自动分析内容，生成智能摘要，理解你的灵感
+- 🔗 **可视化组合** - 拖拽式拓扑编辑，直观定义灵感之间的关系
+- 💡 **创意生成** - 基于灵感组合，AI自动生成多个创意方案
+- 📝 **提示词输出** - 一键生成详细的AI提示词，直接用于创作
+- 📦 **文件聚合** - 将相关素材自动聚合导出，方便分享和备份
+
+---
+
+## 🎯 功能特性
+
+### 1. 多类型灵感管理
+
+支持多种文件类型，自动识别分类：
+
+| 类型 | 支持格式 | AI能力 |
+|------|----------|--------|
+| 🖼️ 图片 | jpg, png, gif, webp, svg, bmp | 图像内容识别与描述 |
+| 💻 代码 | py, js, ts, java, go, rs, cpp, vue, jsx... | 代码结构分析与功能总结 |
+| 📄 文档 | pdf, doc, docx, txt, md, rst | 文档内容提取与摘要 |
+| 🎬 视频 | mp4, avi, mov, mkv, webm | 视频信息提取 |
+| 🎵 音频 | mp3, wav, flac, aac, ogg | 音频信息提取 |
+| 📁 文件夹 | 任意文件夹 | 项目结构分析 |
+
+### 2. AI智能总结
+
+为每个灵感素材自动生成AI总结：
+
+- **图片**：识别图像内容，描述视觉元素、风格、色彩
+- **代码**：分析代码结构，总结功能模块、技术栈
+- **文档**：提取关键信息，生成内容摘要
+- **文件夹**：分析项目结构，识别技术栈和模块划分
+
+### 3. 可视化组合编辑
+
+直观的拓扑图编辑器：
+
+- 🖱️ 拖拽添加灵感节点
+- 🔗 可视化连接定义关系
+- 📐 自由布局，清晰展示
+- 💾 组合保存，随时调用
+
+### 4. 创意生成引擎
+
+基于灵感组合生成创意：
+
+- 🎲 多方案生成 - 一次生成多个创意方向
+- 🔄 迭代优化 - 支持反馈调整
+- 💾 持久存储 - 创意随时回顾
+
+### 5. 智能提示词生成
+
+一键生成专业提示词：
+
+- 📋 自动整合灵感信息
+- 🎯 结构化输出格式
+- 📏 支持自定义长度
+- 📋 一键复制使用
+
+---
+
+## 🚀 快速开始
 
 ### 环境要求
 
-- Python 3.10+
-- Node.js 18+
+- **Python** 3.10 或更高版本
+- **Node.js** 18 或更高版本
+- **AI模型API**（OpenAI 兼容接口）
 
-### 安装
+### 安装步骤
+
+#### 1. 克隆项目
 
 ```bash
-# 克隆项目
 git clone https://github.com/chatabc/creative_master.git
 cd creative_master
+```
 
-# 安装后端依赖
+#### 2. 安装后端依赖
+
+```bash
 pip install -r backend/requirements.txt
+```
 
-# 安装前端依赖
+#### 3. 安装前端依赖
+
+```bash
 cd frontend
 npm install
 ```
 
-### 配置
+#### 4. 配置环境变量
 
-1. 复制环境变量示例文件：
+创建 `.env` 文件：
+
 ```bash
 cp .env.example .env
 ```
 
-2. 编辑 `.env` 文件，配置AI模型API密钥：
-```
+编辑 `.env` 文件，配置你的AI模型API：
+
+```env
+# OpenAI 兼容 API 配置
 OPENAI_API_KEY=your_api_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1
+
+# 或者使用其他兼容服务
+# OPENAI_BASE_URL=https://api.deepseek.com/v1
+# OPENAI_BASE_URL=https://api.openai-proxy.com/v1
 ```
 
-### 启动
+### 启动服务
+
+#### 启动后端（端口 8002）
 
 ```bash
-# 启动后端 (端口 8002)
 python -m uvicorn backend.main:app --port 8002 --reload
+```
 
-# 启动前端 (端口 3001)
+#### 启动前端（端口 3001）
+
+```bash
 cd frontend
 npm run dev -- --port 3001
 ```
 
-访问 http://localhost:3001 开始使用。
+#### 访问应用
 
-## 项目结构
+打开浏览器访问：**http://localhost:3001**
+
+---
+
+## 📖 使用教程
+
+### 第一步：添加灵感
+
+#### 方式一：上传文件
+
+1. 点击左侧菜单「灵感库」
+2. 点击右上角「添加灵感」按钮
+3. 选择「上传文件」模式
+4. 拖拽或点击选择文件（支持多选和文件夹）
+5. 添加标签（可选），点击「上传」
+
+#### 方式二：添加路径
+
+1. 点击「添加灵感」按钮
+2. 选择「文件路径」模式
+3. 输入文件或文件夹的完整路径
+4. 选择是否复制到项目存储
+5. 点击「添加」
+
+#### 生成AI总结
+
+上传完成后，点击灵感卡片上的💡图标，为灵感生成AI总结。
+
+> 💡 **提示**：AI总结会自动分析内容并生成描述，帮助你在组合时快速了解灵感内容。
+
+---
+
+### 第二步：创建组合
+
+1. 点击左侧菜单「生成组合」
+2. 从左侧灵感列表拖拽灵感到右侧画布
+3. 点击节点可以编辑名称和描述
+4. 点击「保存组合」按钮
+5. 输入组合名称和描述
+
+> 💡 **提示**：组合可以包含任意数量的灵感，系统会自动处理它们之间的关系。
+
+---
+
+### 第三步：生成创意
+
+#### 方式一：从组合管理进入
+
+1. 点击左侧菜单「组合管理」
+2. 找到目标组合，点击「生成创意 →」
+3. 系统会自动跳转到创意生成页面
+
+#### 方式二：直接生成
+
+1. 点击左侧菜单「生成创意」
+2. 选择一个已有的组合
+3. 点击「生成创意」按钮
+4. 等待AI生成创意方案
+
+> 💡 **提示**：每次生成会产出多个创意方案，你可以选择最满意的一个。
+
+---
+
+### 第四步：生成提示词
+
+1. 在创意管理页面找到目标创意
+2. 点击「生成提示词」按钮
+3. 系统会基于创意内容和相关灵感生成详细提示词
+4. 点击「复制」按钮，将提示词复制到剪贴板
+
+> 💡 **提示**：生成的提示词包含了所有相关灵感的信息，可以直接用于AI创作工具。
+
+---
+
+### 第五步：聚合文件（可选）
+
+如果你需要将创意相关的所有源文件打包：
+
+1. 在创意详情页点击「聚合文件」
+2. 选择输出目录
+3. 系统会自动将所有相关文件复制到指定目录
+4. 文件按类型分类存放
+
+---
+
+## 🎨 界面预览
+
+### 工作台
+![工作台](docs/screenshots/home.png)
+
+### 灵感库
+![灵感库](docs/screenshots/inspirations.png)
+
+### 组合编辑
+![组合编辑](docs/screenshots/combine.png)
+
+### 创意管理
+![创意管理](docs/screenshots/creatives.png)
+
+---
+
+## ⚙️ 高级配置
+
+### AI模型配置
+
+在「设置」页面可以配置多个AI模型：
+
+1. 点击左侧菜单「设置」
+2. 在「AI模型配置」区域点击「添加模型」
+3. 填写模型信息：
+   - **名称**：自定义显示名称
+   - **模型ID**：如 `gpt-4`、`deepseek-chat`
+   - **API密钥**：你的API密钥
+   - **Base URL**：API端点地址
+
+### 文件类型配置
+
+可以自定义文件类型识别规则：
+
+1. 在「设置」页面找到「文件类型配置」
+2. 添加或修改文件类型
+3. 设置扩展名、显示名称、颜色
+
+---
+
+## 📁 项目结构
 
 ```
 creative_master/
-├── backend/           # FastAPI后端服务
-│   ├── api/          # API路由
-│   ├── core/         # 核心模块
-│   └── models/       # 数据模型
-├── frontend/         # Vue 3前端
+├── backend/                 # 后端服务
+│   ├── api/                # API路由
+│   │   └── routes.py       # 接口定义
+│   ├── core/               # 核心模块
+│   │   ├── inspiration.py  # 灵感管理
+│   │   ├── ai_summarizer.py # AI总结
+│   │   ├── creative_gen.py # 创意生成
+│   │   └── prompt_gen.py   # 提示词生成
+│   ├── models/             # 数据模型
+│   └── main.py             # 应用入口
+├── frontend/               # 前端界面
 │   └── src/
-│       ├── components/  # UI组件
-│       ├── views/       # 页面视图
-│       └── stores/      # 状态管理
-├── data/             # JSON数据存储
-└── storage/          # 灵感文件存储
+│       ├── components/     # UI组件
+│       ├── views/          # 页面视图
+│       └── stores/         # 状态管理
+├── data/                   # 数据存储
+└── storage/                # 文件存储
 ```
 
-## 技术栈
+---
 
-| 后端 | 前端 |
-|------|------|
-| Python 3.10+ | Vue 3 |
-| FastAPI | TypeScript |
-| Pydantic | TailwindCSS |
-| OpenAI API | Pinia |
-| Pillow | Vue Router |
+## 🔌 API文档
 
-## API文档
+启动后端后访问：
 
-启动后端后访问 http://localhost:8002/docs 查看Swagger API文档。
+- **Swagger UI**: http://localhost:8002/docs
+- **ReDoc**: http://localhost:8002/redoc
 
-## 使用流程
+### 主要接口
 
-1. **添加灵感** - 上传文件或添加文件路径
-2. **AI总结** - 为灵感生成AI摘要
-3. **创建组合** - 将多个灵感组合在一起
-4. **生成创意** - 基于组合生成创意方案
-5. **生成提示词** - 为创意生成详细的AI提示词
-6. **聚合文件** - 将相关文件导出到指定文件夹
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/v1/inspirations` | GET | 获取灵感列表 |
+| `/api/v1/inspirations/upload` | POST | 上传灵感文件 |
+| `/api/v1/inspirations/{id}/summarize` | POST | 生成AI总结 |
+| `/api/v1/combinations` | GET/POST | 组合管理 |
+| `/api/v1/creatives` | GET/POST | 创意管理 |
+| `/api/v1/prompts/generate` | POST | 生成提示词 |
 
-## 许可证
+---
 
-MIT License
+## 🤝 贡献指南
+
+欢迎贡献代码、报告问题或提出建议！
+
+1. Fork 本仓库
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 创建 Pull Request
+
+---
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+
+---
+
+## 🙏 致谢
+
+- [FastAPI](https://fastapi.tiangolo.com/) - 现代化的Python Web框架
+- [Vue.js](https://vuejs.org/) - 渐进式JavaScript框架
+- [TailwindCSS](https://tailwindcss.com/) - 实用优先的CSS框架
+- [OpenAI](https://openai.com/) - AI能力支持
+
+---
+
+<div align="center">
+
+**如果这个项目对你有帮助，请给一个 ⭐️ Star！**
+
+Made with ❤️ by [chatabc](https://github.com/chatabc)
+
+</div>

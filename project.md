@@ -59,7 +59,8 @@ creative_master/
 │   ├── combinations.json   # 组合数据
 │   ├── creatives.json      # 创意数据
 │   ├── model_configs.json  # AI模型配置
-│   └── relation_types.json # 关系类型
+│   ├── relation_types.json # 关系类型
+│   └── file_types.json     # 文件类型配置
 ├── storage/                # 灵感文件存储
 │   ├── inspirations/       # 按类型分类存储
 │   │   ├── image/
@@ -69,7 +70,6 @@ creative_master/
 │   │   ├── audio/
 │   │   ├── document/
 │   │   └── folder/
-│   └── file_types.json     # 文件类型配置
 ├── tmp_script/             # 临时脚本存放
 ├── .env.example            # 环境变量示例
 ├── .gitignore
@@ -94,6 +94,8 @@ creative_master/
 - 代码结构分析与功能总结
 - 文字内容提取与摘要
 - 文件夹项目结构分析
+- 支持文件夹结构化总结（目录树、概览、重要/次要文档）
+- 支持分段重新生成总结
 - 支持多种AI模型配置
 
 ### 3. 可视化组合模块 (Visual Combination)
@@ -152,6 +154,7 @@ creative_master/
 - `GET /api/v1/inspirations/{id}` - 获取单个灵感
 - `DELETE /api/v1/inspirations/{id}` - 删除灵感
 - `POST /api/v1/inspirations/{id}/summarize` - AI总结灵感
+- `POST /api/v1/inspirations/{id}/summarize/section` - 重新生成总结部分
 
 ### 组合管理
 - `GET /api/v1/combinations` - 获取组合列表

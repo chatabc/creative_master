@@ -2,10 +2,12 @@
 import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useFileTypeStore } from '@/stores/fileType'
+import { useInspirationStore } from '@/stores/inspiration'
 import type { CustomFileType, AIModelConfig } from '@/types'
 
 const settingsStore = useSettingsStore()
 const fileTypeStore = useFileTypeStore()
+const inspirationStore = useInspirationStore()
 
 onMounted(async () => {
   await Promise.all([
@@ -245,7 +247,7 @@ const handleUpdateFileType = async () => {
       
       if (confirmed) {
         const extensionsToReplace = result.conflicts.map(c => c.extension)
-        await fileTypeStore.updateFileType(editingFileType.value.id, {
+        const replaceResult = await fileTypeStore.updateFileType(editingFileType.value.id, {
           display_name: editingFileType.value.display_name,
           extensions: editingFileType.value.extensions,
           icon: editingFileType.value.icon,
@@ -255,9 +257,17 @@ const handleUpdateFileType = async () => {
           force_replace: true,
           extensions_to_replace: extensionsToReplace
         })
+        
+        if (replaceResult.inspirationsUpdated && replaceResult.inspirationsUpdated > 0) {
+          await inspirationStore.fetchInspirations()
+          alert(`文件类型已更新，${replaceResult.inspirationsUpdated} 个灵感类型已同步更新`)
+        }
       } else {
         return
       }
+    } else if (result.inspirationsUpdated && result.inspirationsUpdated > 0) {
+      await inspirationStore.fetchInspirations()
+      alert(`文件类型已更新，${result.inspirationsUpdated} 个灵感类型已同步更新`)
     }
     
     editingFileType.value = null

@@ -6,6 +6,8 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks,
 from fastapi.responses import FileResponse
 from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
+from pathlib import Path
+import time
 
 from ..models import (
     Inspiration, InspirationCombination, 
@@ -31,6 +33,8 @@ def init_default_model():
     default_config = config_manager.get_default_model_config()
     if default_config:
         config = AIModelConfig(**default_config)
+        # Force is_default to True to ensure fallback logic works correctly
+        config.is_default = True
         ai_summarizer.register_model(config)
         creative_generator = CreativeGenerator(config)
         prompt_generator = PromptGenerator(config)
@@ -206,7 +210,15 @@ async def update_file_type(type_id: str, request: UpdateFileTypeRequest):
                 }
             raise HTTPException(status_code=404, detail="File type not found")
         
-        return {"status": "success", "file_type": file_type.model_dump()}
+        updated_count = inspiration_manager.refresh_all_types(
+            lambda p: file_type_manager.detect_type(p)
+        )
+        
+        return {
+            "status": "success", 
+            "file_type": file_type.model_dump(),
+            "inspirations_updated": updated_count
+        }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -237,7 +249,16 @@ async def add_extension_to_type(type_name: str, request: AddExtensionRequest):
                     "conflict": conflict
                 }
             raise HTTPException(status_code=404, detail="File type not found")
-        return {"status": "success", "file_type": ft.model_dump()}
+        
+        updated_count = inspiration_manager.refresh_all_types(
+            lambda p: file_type_manager.detect_type(p)
+        )
+        
+        return {
+            "status": "success", 
+            "file_type": ft.model_dump(),
+            "inspirations_updated": updated_count
+        }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -247,12 +268,27 @@ async def remove_extension_from_type(type_name: str, extension: str):
     ft = file_type_manager.remove_extension_from_type(type_name, extension)
     if not ft:
         raise HTTPException(status_code=404, detail="File type not found")
-    return ft
+    
+    updated_count = inspiration_manager.refresh_all_types(
+        lambda p: file_type_manager.detect_type(p)
+    )
+    
+    return {
+        "file_type": ft.model_dump(),
+        "inspirations_updated": updated_count
+    }
 
 
 @router.post("/file-types/reset")
 async def reset_file_types():
-    return file_type_manager.reset_to_default()
+    result = file_type_manager.reset_to_default()
+    
+    updated_count = inspiration_manager.refresh_all_types(
+        lambda p: file_type_manager.detect_type(p)
+    )
+    
+    result["inspirations_updated"] = updated_count
+    return result
 
 
 # ==================== Inspirations API ====================
@@ -295,35 +331,38 @@ async def upload_inspiration(
 async def upload_inspirations_batch(
     files: List[UploadFile] = File(...),
     tags: Optional[str] = Form(None),
-    file_list: Optional[str] = Form(None)
+    folder_name: Optional[str] = Form(None)
 ):
     results = []
     
-    if file_list:
+    if folder_name:
         import tempfile
-        temp_dir = Path(tempfile.gettempdir()) / "creative_master_folder_upload"
+        import shutil
+        
+        temp_dir = Path(tempfile.gettempdir()) / "creative_master_folder_upload" / folder_name
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
         temp_dir.mkdir(parents=True, exist_ok=True)
         
         try:
-            temp_path = temp_dir / f"{int(time.time())}_folder.zip"
-            with open(temp_path, 'wb') as f:
-                f.write(await files[0].read())
-            
-            import zipfile
-            with zipfile.ZipFile(temp_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_dir / "extracted")
+            for file in files:
+                file_path = temp_dir / file.filename
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+                content = await file.read()
+                with open(file_path, 'wb') as f:
+                    f.write(content)
             
             inspiration = inspiration_manager.add_inspiration(
-                source_path=str(temp_dir / "extracted"),
-                name=Path(files[0].filename).stem,
+                source_path=str(temp_dir),
+                name=folder_name,
                 tags=tags.split(",") if tags else [],
                 copy_file=True
             )
             results.append(inspiration)
-        finally:
-            import shutil
+        except Exception as e:
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)
+            raise HTTPException(status_code=500, detail=str(e))
     else:
         for file in files:
             content = await file.read()
@@ -360,12 +399,155 @@ async def summarize_inspiration(inspiration_id: str, background_tasks: Backgroun
         raise HTTPException(status_code=404, detail="Inspiration not found")
     
     if not ai_summarizer.get_summarizer(inspiration.type):
-        raise HTTPException(status_code=400, detail="No AI model configured for this type")
+        # Try to re-initialize default model if not set
+        init_default_model()
+        if not ai_summarizer.get_summarizer(inspiration.type) and not ai_summarizer.default_config:
+            print(f"[ERROR] No AI model configured for type: {inspiration.type}. Default config: {ai_summarizer.default_config}")
+            raise HTTPException(status_code=400, detail=f"No AI model configured for type '{inspiration.type}'")
     
-    summary = await ai_summarizer.summarize_inspiration(inspiration)
-    inspiration_manager.update_inspiration(inspiration_id, summary=summary)
+    ignored_paths = inspiration.metadata.get('ignored_paths', []) if inspiration.metadata else []
+    try:
+        summary = await ai_summarizer.summarize_inspiration(inspiration, ignored_paths=ignored_paths)
+        inspiration_manager.update_inspiration(inspiration_id, summary=summary)
+        return {"inspiration_id": inspiration_id, "summary": summary}
+    except Exception as e:
+        print(f"Error in summarize_inspiration: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RegenerateSectionRequest(BaseModel):
+    section: str
+
+
+@router.post("/inspirations/{inspiration_id}/summarize/section")
+async def regenerate_summary_section(inspiration_id: str, request: RegenerateSectionRequest):
+    inspiration = inspiration_manager.get_inspiration(inspiration_id)
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
     
-    return {"inspiration_id": inspiration_id, "summary": summary}
+    summarizer = ai_summarizer.get_summarizer(inspiration.type)
+    if not summarizer:
+         # Try to re-initialize default model if not set
+        init_default_model()
+        summarizer = ai_summarizer.get_summarizer(inspiration.type)
+        if not summarizer:
+            raise HTTPException(status_code=400, detail="No AI model configured for this type")
+        
+    if inspiration.type != "folder":
+        raise HTTPException(status_code=400, detail="Only folder type supports section regeneration")
+        
+    import json
+    try:
+        if not inspiration.summary:
+             raise HTTPException(status_code=400, detail="No summary exists. Please generate summary first.")
+             
+        current_summary = json.loads(inspiration.summary)
+        context = current_summary.get("_context", {})
+        # Ensure tree is in context
+        if "tree" not in context and "tree" in current_summary:
+            context["tree"] = current_summary["tree"]
+            
+        # Ensure file_summaries are in context
+        if "file_summaries" not in context:
+             # Fallback: cannot regenerate without context
+             raise HTTPException(status_code=400, detail="Missing context for regeneration. Please regenerate full summary.")
+
+        # Cast to FolderSummarizer to access regenerate_section
+        from ..core.ai_summarizer import FolderSummarizer
+        if isinstance(summarizer, FolderSummarizer):
+            ignored_paths = inspiration.metadata.get('ignored_paths', []) if inspiration.metadata else []
+            new_content = await summarizer.regenerate_section(
+                request.section, 
+                context, 
+                folder_path=inspiration.path, 
+                ignored_paths=ignored_paths
+            )
+            
+            current_summary[request.section] = new_content
+            inspiration_manager.update_inspiration(inspiration_id, summary=json.dumps(current_summary, ensure_ascii=False))
+            
+            return {"section": request.section, "content": new_content}
+        else:
+            raise HTTPException(status_code=500, detail="Invalid summarizer type")
+            
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Existing summary is not in structured format. Please regenerate full summary first.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+class UpdateInspirationRequest(BaseModel):
+    name: Optional[str] = None
+    tags: Optional[List[str]] = None
+    summary: Optional[str] = None
+    metadata: Optional[Dict] = None
+
+
+@router.put("/inspirations/{inspiration_id}", response_model=Inspiration)
+async def update_inspiration(inspiration_id: str, request: UpdateInspirationRequest):
+    inspiration = inspiration_manager.get_inspiration(inspiration_id)
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
+    
+    update_data = {}
+    if request.name is not None:
+        update_data['name'] = request.name
+    if request.tags is not None:
+        update_data['tags'] = request.tags
+    if request.summary is not None:
+        update_data['summary'] = request.summary
+    if request.metadata is not None:
+        update_data['metadata'] = request.metadata
+    
+    inspiration_manager.update_inspiration(inspiration_id, **update_data)
+    return inspiration_manager.get_inspiration(inspiration_id)
+
+
+@router.get("/inspirations/{inspiration_id}/tree")
+async def get_inspiration_tree(inspiration_id: str):
+    inspiration = inspiration_manager.get_inspiration(inspiration_id)
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
+    
+    if inspiration.type != "folder":
+        raise HTTPException(status_code=400, detail="Not a folder type inspiration")
+    
+    from pathlib import Path
+    
+    def build_tree(path: Path, relative_path: str = "") -> List[Dict]:
+        items = []
+        try:
+            for item in sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+                if item.name.startswith('.') or item.name in ['node_modules', '__pycache__', '.git', 'venv', 'build', 'dist', '.venv']:
+                    continue
+                
+                item_relative = f"{relative_path}/{item.name}" if relative_path else item.name
+                
+                node = {
+                    "name": item.name,
+                    "path": item_relative,
+                    "is_dir": item.is_dir()
+                }
+                
+                if item.is_file():
+                    node["size"] = item.stat().st_size
+                else:
+                    children = build_tree(item, item_relative)
+                    if children:
+                        node["children"] = children
+                
+                items.append(node)
+        except PermissionError:
+            pass
+        
+        return items
+    
+    folder_path = Path(inspiration.path)
+    if not folder_path.exists():
+        raise HTTPException(status_code=404, detail="Folder not found")
+    
+    return build_tree(folder_path)
 
 
 @router.delete("/inspirations/{inspiration_id}")
@@ -373,6 +555,99 @@ async def delete_inspiration(inspiration_id: str):
     if not inspiration_manager.delete_inspiration(inspiration_id):
         raise HTTPException(status_code=404, detail="Inspiration not found")
     return {"status": "deleted"}
+
+
+class RegenerateSummariesRequest(BaseModel):
+    file_path: Optional[str] = None
+
+
+@router.post("/inspirations/{inspiration_id}/regenerate-single")
+async def regenerate_single_summary(inspiration_id: str, request: RegenerateSummariesRequest):
+    print(f"regenerate_single_summary called for {inspiration_id}, file_path: {request.file_path}")
+    inspiration = inspiration_manager.get_inspiration(inspiration_id)
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
+    
+    if inspiration.type != "folder":
+        raise HTTPException(status_code=400, detail="Not a folder type inspiration")
+    
+    from ..core import ai_summarizer
+    
+    summarizer = ai_summarizer.get_summarizer(inspiration.type)
+    print(f"Got summarizer: {summarizer}, type: {type(summarizer)}")
+    if not summarizer:
+        raise HTTPException(status_code=400, detail="No AI model configured for this type")
+    
+    ignored_paths = inspiration.metadata.get('ignored_paths', [])
+    print(f"Ignored paths: {ignored_paths}")
+    
+    summary = await summarizer.regenerate_single_summary(
+        inspiration.path,
+        request.file_path,
+        ignored_paths=ignored_paths
+    )
+    print(f"Generated summary: {summary[:100] if summary else 'None'}")
+    
+    if summary:
+        file_summaries = inspiration.metadata.get('file_summaries', [])
+        file_summaries = [
+            fs if fs['path'] != request.file_path else fs
+            for fs in file_summaries
+        ]
+        
+        if request.file_path:
+            file_summaries.append({
+                "path": request.file_path,
+                "summary": summary
+            })
+        
+        inspiration_manager.update_inspiration(
+            inspiration_id,
+            metadata={
+                **inspiration.metadata,
+                "file_summaries": file_summaries
+            }
+        )
+    
+    return {"summary": summary}
+
+
+@router.post("/inspirations/{inspiration_id}/regenerate-summaries")
+async def regenerate_folder_summaries(inspiration_id: str):
+    print(f"regenerate_folder_summaries called for {inspiration_id}")
+    inspiration = inspiration_manager.get_inspiration(inspiration_id)
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
+    
+    if inspiration.type != "folder":
+        raise HTTPException(status_code=400, detail="Not a folder type inspiration")
+    
+    from ..core import ai_summarizer
+    
+    summarizer = ai_summarizer.get_summarizer(inspiration.type)
+    print(f"Got summarizer: {summarizer}, type: {type(summarizer)}")
+    if not summarizer:
+        raise HTTPException(status_code=400, detail="No AI model configured for this type")
+    
+    ignored_paths = inspiration.metadata.get('ignored_paths', [])
+    print(f"Ignored paths: {ignored_paths}")
+    
+    result = await summarizer.regenerate_all_summaries(
+        inspiration.path,
+        ignored_paths=ignored_paths
+    )
+    print(f"Generated result: {result}")
+    
+    inspiration_manager.update_inspiration(
+        inspiration_id,
+        summary=result.get('overall_summary', ''),
+        metadata={
+            **inspiration.metadata,
+            "file_summaries": result.get('file_summaries', [])
+        }
+    )
+    
+    return result
 
 
 class AICompleteRelationsRequest(BaseModel):

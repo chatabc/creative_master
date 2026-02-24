@@ -75,7 +75,7 @@ export const useFileTypeStore = defineStore('fileType', () => {
     text_mode?: boolean
     force_replace?: boolean
     extensions_to_replace?: string[]
-  }): Promise<{ success: boolean; fileType?: CustomFileType; conflicts?: ExtensionConflict[] }> => {
+  }): Promise<{ success: boolean; fileType?: CustomFileType; conflicts?: ExtensionConflict[]; inspirationsUpdated?: number }> => {
     try {
       const response = await axios.put(`${API_BASE}/file-types/${typeId}`, data)
       
@@ -88,7 +88,11 @@ export const useFileTypeStore = defineStore('fileType', () => {
         if (index > -1) {
           fileTypes.value[index] = response.data.file_type
         }
-        return { success: true, fileType: response.data.file_type }
+        return { 
+          success: true, 
+          fileType: response.data.file_type,
+          inspirationsUpdated: response.data.inspirations_updated 
+        }
       }
       
       return { success: true }
@@ -103,7 +107,7 @@ export const useFileTypeStore = defineStore('fileType', () => {
     fileTypes.value = fileTypes.value.filter(ft => ft.id !== typeId)
   }
   
-  const addExtensionToType = async (typeName: string, extension: string, forceReplace: boolean = false): Promise<{ success: boolean; fileType?: CustomFileType; conflict?: ExtensionConflict }> => {
+  const addExtensionToType = async (typeName: string, extension: string, forceReplace: boolean = false): Promise<{ success: boolean; fileType?: CustomFileType; conflict?: ExtensionConflict; inspirationsUpdated?: number }> => {
     try {
       const response = await axios.post(`${API_BASE}/file-types/${typeName}/extensions`, { 
         extension,
@@ -119,7 +123,11 @@ export const useFileTypeStore = defineStore('fileType', () => {
         if (index > -1) {
           fileTypes.value[index] = response.data.file_type
         }
-        return { success: true, fileType: response.data.file_type }
+        return { 
+          success: true, 
+          fileType: response.data.file_type,
+          inspirationsUpdated: response.data.inspirations_updated 
+        }
       }
       
       return { success: true }
@@ -129,19 +137,25 @@ export const useFileTypeStore = defineStore('fileType', () => {
     }
   }
   
-  const removeExtensionFromType = async (typeName: string, extension: string) => {
+  const removeExtensionFromType = async (typeName: string, extension: string): Promise<{ fileType?: CustomFileType; inspirationsUpdated?: number }> => {
     const response = await axios.delete(`${API_BASE}/file-types/${typeName}/extensions/${extension}`)
     const index = fileTypes.value.findIndex(ft => ft.name === typeName)
-    if (index > -1) {
-      fileTypes.value[index] = response.data
+    if (index > -1 && response.data.file_type) {
+      fileTypes.value[index] = response.data.file_type
     }
-    return response.data
+    return { 
+      fileType: response.data.file_type,
+      inspirationsUpdated: response.data.inspirations_updated 
+    }
   }
   
-  const resetToDefault = async () => {
+  const resetToDefault = async (): Promise<{ fileTypes: CustomFileType[]; inspirationsUpdated?: number }> => {
     const response = await axios.post(`${API_BASE}/file-types/reset`)
-    fileTypes.value = response.data
-    return response.data
+    fileTypes.value = response.data.file_types || response.data
+    return { 
+      fileTypes: fileTypes.value,
+      inspirationsUpdated: response.data.inspirations_updated 
+    }
   }
   
   const detectType = (filename: string): string => {

@@ -112,11 +112,21 @@ const triggerFileInput = () => {
 
 const onFileSelect = async (e: Event) => {
   const target = e.target as HTMLInputElement
-  const files = Array.from(target.files || [])
+  const files = target.files
   
-  if (files.length > 0) {
-    if (props.multiple) {
-      selectedFiles.value = files
+  if (files && files.length > 0) {
+    const firstFile = files[0] as any
+    const hasRelativePath = firstFile.webkitRelativePath
+    
+    if (hasRelativePath && !props.multiple) {
+      const folderName = firstFile.webkitRelativePath.split('/')[0]
+      selectedFiles.value = [{ 
+        name: folderName, 
+        files: Array.from(files),
+        length: files.length 
+      } as any]
+    } else if (props.multiple) {
+      selectedFiles.value = Array.from(files)
     } else {
       selectedFiles.value = [files[0]]
     }
@@ -165,7 +175,7 @@ defineExpose({
         ref="fileInput"
         type="file"
         :multiple="multiple"
-        :webkitdirectory="multiple ? undefined : true"
+        :webkitdirectory="!multiple"
         :accept="accept"
         @change="onFileSelect"
         class="hidden"
@@ -190,13 +200,13 @@ defineExpose({
         </svg>
         
         <p class="text-lg font-medium text-gray-700 mb-1">
-          {{ isDragging ? '松开以上传文件' : (multiple ? '拖拽文件/文件夹到此处' : '拖拽文件/文件夹到此处') }}
+          {{ isDragging ? '松开以上传' : (multiple ? '拖拽文件到此处' : '拖拽文件夹到此处') }}
         </p>
         <p class="text-sm text-gray-500">
-          或 <span class="text-primary-600 font-medium">{{ multiple ? '点击选择文件/文件夹' : '点击选择文件/文件夹' }}</span>
+          或 <span class="text-primary-600 font-medium">{{ multiple ? '点击选择文件' : '点击选择文件夹' }}</span>
         </p>
         <p class="text-xs text-gray-400 mt-2">
-          支持所有文件类型：图片、代码、视频、音频、模型文件等，也支持文件夹上传
+          {{ multiple ? '支持所有文件类型：图片、代码、视频、音频、模型文件等' : '选择一个文件夹作为灵感素材' }}
         </p>
       </div>
     </div>
@@ -204,7 +214,7 @@ defineExpose({
     <div v-if="selectedFiles.length > 0" class="mt-4">
       <div class="flex justify-between items-center mb-2">
         <span class="text-sm font-medium text-gray-700">
-          已选择 {{ selectedFiles.length }} 个{{ selectedFiles[0] instanceof FileList ? '文件夹' : '文件' }}
+          已选择 {{ selectedFiles.length }} 个{{ (selectedFiles[0] as any).files ? '文件夹' : '文件' }}
         </span>
         <button 
           @click="clearFiles"
@@ -223,16 +233,16 @@ defineExpose({
           <div class="flex items-center space-x-3">
             <div 
               class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-              :style="{ backgroundColor: getFileTypeColor(file instanceof File ? file.name : 'FOLDER') }"
+              :style="{ backgroundColor: getFileTypeColor((file as any).files ? 'FOLDER' : (file as File).name) }"
             >
-              {{ file instanceof File ? file.name.split('.').pop()?.toUpperCase().slice(0, 3) || 'FILE' : 'DIR' }}
+              {{ (file as any).files ? 'DIR' : ((file as File).name.split('.').pop()?.toUpperCase().slice(0, 3) || 'FILE') }}
             </div>
             <div>
               <p class="text-sm font-medium text-gray-800 truncate max-w-xs">
-                {{ file instanceof File ? file.name : '文件夹: ' + (file as any).name }}
+                {{ (file as any).files ? '文件夹: ' + (file as any).name : (file as File).name }}
               </p>
               <p class="text-xs text-gray-500">
-                {{ file instanceof File ? formatFileSize(file.size) : (file as any).length + ' 个文件' }}
+                {{ (file as any).files ? (file as any).length + ' 个文件' : formatFileSize((file as File).size) }}
               </p>
             </div>
           </div>

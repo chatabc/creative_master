@@ -85,7 +85,7 @@ class InspirationManager:
         if source.is_dir():
             inspiration_type = "folder"
         
-        name = name or source.stem
+        name = name or source.name
         
         if copy_file:
             dest_folder = self.storage_path / inspiration_type
@@ -139,7 +139,7 @@ class InspirationManager:
         try:
             inspiration = self.add_inspiration(
                 source_path=str(temp_path),
-                name=name or Path(filename).stem,
+                name=name or Path(filename).name,
                 tags=tags,
                 copy_file=True,
                 file_type=file_type
@@ -236,6 +236,33 @@ class InspirationManager:
                 results.append(Inspiration(**data))
         
         return results
+    
+    def refresh_all_types(self, type_detector) -> int:
+        updated_count = 0
+        
+        for inspiration_id, data in self.metadata["inspirations"].items():
+            if data.get("type") == "folder":
+                continue
+            
+            stored_path = data.get("path")
+            if not stored_path:
+                continue
+            
+            path = Path(stored_path)
+            if not path.exists():
+                continue
+            
+            new_type = type_detector(path)
+            if new_type and new_type != data.get("type"):
+                data["type"] = new_type
+                data["updated_at"] = datetime.now().isoformat()
+                self.metadata["inspirations"][inspiration_id] = data
+                updated_count += 1
+        
+        if updated_count > 0:
+            self._save_metadata()
+        
+        return updated_count
     
     def batch_add_inspirations(
         self,

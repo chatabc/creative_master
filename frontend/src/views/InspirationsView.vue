@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useInspirationStore } from '@/stores/inspiration'
 import { useFileTypeStore } from '@/stores/fileType'
 import FileDropZone from '@/components/FileDropZone.vue'
+import TreeNode from '@/components/TreeNode.vue'
 import type { Inspiration } from '@/types'
 
 const inspirationStore = useInspirationStore()
@@ -16,7 +17,7 @@ onMounted(async () => {
 })
 
 const isAdding = ref(false)
-const addMode = ref<'upload' | 'path'>('upload')
+const addMode = ref<'file' | 'folder'>('file')
 const newInspiration = ref({
   sourcePath: '',
   name: '',
@@ -27,7 +28,8 @@ const newInspiration = ref({
 const selectedType = ref<string>('')
 const searchQuery = ref('')
 const fileDropZone = ref<InstanceType<typeof FileDropZone> | null>(null)
-const uploadingFiles = ref<(File | FileList)[]>([])
+const folderDropZone = ref<InstanceType<typeof FileDropZone> | null>(null)
+const uploadingFiles = ref<any[]>([])
 const isUploading = ref(false)
 
 const selectedInspiration = ref<Inspiration | null>(null)
@@ -40,10 +42,46 @@ const showDeleteConfirm = ref(false)
 const deleteTargetId = ref<string | null>(null)
 const showBatchDeleteConfirm = ref(false)
 
+const showEditModal = ref(false)
+const editingInspiration = ref<Inspiration | null>(null)
+const editForm = ref({ 
+  name: '', 
+  tags: '', 
+  summary: '', 
+  ignoredPaths: [] as string[],
+  // Structured folder summary fields
+  folderTree: '',
+  folderOverview: '',
+  folderImportant: '',
+  folderSecondary: '',
+  isStructured: false
+})
+const folderTree = ref<any[]>([])
+const fileSummaries = ref<{ path: string; name: string; summary: string }[]>([])
+const regeneratingSummaries = ref(false)
+const regeneratingSingle = ref<string | null>(null)
+const regeneratingSections = ref<Record<string, boolean>>({})
+const batchSummarizing = ref(false)
+
 const typeFilters = computed(() => [
   { value: '', label: '全部' },
   ...fileTypeStore.fileTypes.map(ft => ({ value: ft.name, label: ft.display_name }))
 ])
+
+const parsedSummary = computed(() => {
+  if (!selectedInspiration.value || !selectedInspiration.value.summary) return null
+  if (selectedInspiration.value.type !== 'folder') return null
+  
+  try {
+    const parsed = JSON.parse(selectedInspiration.value.summary)
+    if (parsed.tree && parsed.overview) {
+      return parsed
+    }
+  } catch (e) {
+    return null
+  }
+  return null
+})
 
 const toggleSelection = (id: string) => {
   const index = selectedIds.value.indexOf(id)
@@ -78,9 +116,13 @@ const handleUpload = async () => {
       ? newInspiration.value.tags.split(',').map(t => t.trim()).filter(Boolean)
       : []
     
-    const results = await inspirationStore.uploadFiles(uploadingFiles.value, tags)
+    await inspirationStore.uploadFiles(uploadingFiles.value, tags)
     
-    fileDropZone.value?.clearFiles()
+    if (addMode.value === 'file') {
+      fileDropZone.value?.clearFiles()
+    } else {
+      folderDropZone.value?.clearFiles()
+    }
     uploadingFiles.value = []
     newInspiration.value = { sourcePath: '', name: '', tags: '', copyFile: true }
     isAdding.value = false
@@ -92,29 +134,6 @@ const handleUpload = async () => {
   }
 }
 
-const handleAddInspiration = async () => {
-  if (!newInspiration.value.sourcePath) return
-  
-  const tags = newInspiration.value.tags 
-    ? newInspiration.value.tags.split(',').map(t => t.trim()).filter(Boolean)
-    : []
-  
-  try {
-    await inspirationStore.addInspiration({
-      source_path: newInspiration.value.sourcePath,
-      name: newInspiration.value.name || undefined,
-      tags,
-      copy_file: newInspiration.value.copyFile
-    })
-    
-    isAdding.value = false
-    newInspiration.value = { sourcePath: '', name: '', tags: '', copyFile: true }
-  } catch (error) {
-    console.error('Add inspiration failed:', error)
-    alert('添加灵感失败，请检查路径是否正确')
-  }
-}
-
 const openDetail = (inspiration: Inspiration) => {
   selectedInspiration.value = inspiration
   showDetailModal.value = true
@@ -123,6 +142,201 @@ const openDetail = (inspiration: Inspiration) => {
 const closeDetail = () => {
   showDetailModal.value = false
   selectedInspiration.value = null
+}
+
+const openEditModal = async (inspiration: Inspiration) => {
+  editingInspiration.value = inspiration
+  
+  let isStructured = false
+  let summaryTree = ''
+  let summaryOverview = ''
+  let summaryImportant = ''
+  let summarySecondary = ''
+  let summary = inspiration.summary || ''
+
+  if (inspiration.type === 'folder' && summary) {
+    try {
+      const parsed = JSON.parse(summary)
+      if (parsed.tree && parsed.overview) {
+        isStructured = true
+        summaryTree = parsed.tree
+        summaryOverview = parsed.overview
+        summaryImportant = parsed.important_docs || ''
+        summarySecondary = parsed.secondary_docs || ''
+      }
+    } catch (e) {
+      // Not structured JSON, keep as plain summary
+    }
+  }
+
+  editForm.value = {
+    name: inspiration.name,
+    tags: inspiration.tags.join(', '),
+    summary: summary,
+    ignoredPaths: (inspiration.metadata?.ignored_paths as string[]) || [],
+    folderTree: summaryTree,
+    folderOverview: summaryOverview,
+    folderImportant: summaryImportant,
+    folderSecondary: summarySecondary,
+    isStructured
+  }
+  showEditModal.value = true
+  
+  if (inspiration.type === 'folder') {
+    folderTree.value = []
+    fileSummaries.value = []
+    try {
+      const tree = await inspirationStore.getFolderTree(inspiration.id)
+      folderTree.value = tree
+      
+      const summaries = inspiration.metadata?.file_summaries || []
+      fileSummaries.value = summaries
+    } catch (error) {
+      console.error('Failed to load folder tree:', error)
+    }
+  }
+}
+
+const isIgnored = (path: string): boolean => {
+  return editForm.value.ignoredPaths.some(ignored => 
+    path === ignored || path.startsWith(ignored + '/')
+  )
+}
+
+const regenerateAllSummaries = async () => {
+  if (!editingInspiration.value) return
+  
+  regeneratingSummaries.value = true
+  
+  try {
+    const response = await inspirationStore.regenerateFolderSummaries(editingInspiration.value.id)
+    
+    if (response.file_summaries) {
+      fileSummaries.value = response.file_summaries
+      
+      if (editForm.value.summary) {
+        editForm.value.summary = response.overall_summary || ''
+      }
+    }
+    
+    alert(`已重新生成 ${response.file_summaries.length} 个文件总结`)
+  } catch (error) {
+    console.error('Failed to regenerate summaries:', error)
+    alert('重新生成失败，请重试')
+  } finally {
+    regeneratingSummaries.value = false
+  }
+}
+
+const regenerateSingleSummary = async (filePath: string) => {
+  if (!editingInspiration.value) return
+  
+  regeneratingSingle.value = filePath
+  
+  try {
+    const response = await inspirationStore.regenerateSingleSummary(editingInspiration.value.id, filePath)
+    
+    const index = fileSummaries.value.findIndex(fs => fs.path === filePath)
+    if (index > -1 && response.summary) {
+      fileSummaries.value[index].summary = response.summary
+    }
+    
+    alert('文件总结已更新')
+  } catch (error) {
+    console.error('Failed to regenerate single summary:', error)
+    alert('重新生成失败，请重试')
+  } finally {
+    regeneratingSingle.value = null
+  }
+}
+
+const regenerateSection = async (section: string) => {
+  if (!editingInspiration.value) return
+  
+  regeneratingSections.value[section] = true
+  
+  try {
+    const response = await inspirationStore.regenerateSection(editingInspiration.value.id, section)
+    
+    // Update the corresponding field in editForm
+    if (section === 'tree') editForm.value.folderTree = response
+    else if (section === 'overview') editForm.value.folderOverview = response
+    else if (section === 'important_docs') editForm.value.folderImportant = response
+    else if (section === 'secondary_docs') editForm.value.folderSecondary = response
+    
+    // Also update the summary JSON in editForm so it stays in sync
+    try {
+      const parsed = JSON.parse(editForm.value.summary || '{}')
+      parsed[section] = response
+      editForm.value.summary = JSON.stringify(parsed, null, 2)
+    } catch (e) {
+      // ignore
+    }
+
+    alert('部分总结已更新')
+  } catch (error) {
+    console.error(`Failed to regenerate section ${section}:`, error)
+    alert('重新生成失败，请重试')
+  } finally {
+    regeneratingSections.value[section] = false
+  }
+}
+
+const toggleIgnorePath = (path: string) => {
+  const index = editForm.value.ignoredPaths.indexOf(path)
+  if (index > -1) {
+    editForm.value.ignoredPaths.splice(index, 1)
+  } else {
+    editForm.value.ignoredPaths.push(path)
+  }
+}
+
+const handleEditSave = async () => {
+  if (!editingInspiration.value) return
+  
+  try {
+    const tags = editForm.value.tags 
+      ? editForm.value.tags.split(',').map(t => t.trim()).filter(Boolean)
+      : []
+    
+    let summary = editForm.value.summary
+    
+    if (editForm.value.isStructured) {
+      try {
+        const parsed = JSON.parse(summary || '{}')
+        parsed.tree = editForm.value.folderTree
+        parsed.overview = editForm.value.folderOverview
+        parsed.important_docs = editForm.value.folderImportant
+        parsed.secondary_docs = editForm.value.folderSecondary
+        summary = JSON.stringify(parsed, null, 2)
+      } catch (e) {
+        // Fallback if parsing fails, though it shouldn't if it was structured
+        const newStruct = {
+          tree: editForm.value.folderTree,
+          overview: editForm.value.folderOverview,
+          important_docs: editForm.value.folderImportant,
+          secondary_docs: editForm.value.folderSecondary
+        }
+        summary = JSON.stringify(newStruct, null, 2)
+      }
+    }
+    
+    await inspirationStore.updateInspiration(editingInspiration.value.id, {
+      name: editForm.value.name,
+      tags,
+      summary: summary,
+      metadata: {
+        ...editingInspiration.value.metadata,
+        ignored_paths: editForm.value.ignoredPaths
+      }
+    })
+    
+    showEditModal.value = false
+    editingInspiration.value = null
+  } catch (error) {
+    console.error('Edit failed:', error)
+    alert('编辑失败，请重试')
+  }
 }
 
 const handleSummarize = async (id: string) => {
@@ -184,6 +398,40 @@ const handleBatchDelete = async () => {
   }
 }
 
+const handleBatchSummarize = async (regenerate: boolean) => {
+  if (selectedIds.value.length === 0) return
+  
+  batchSummarizing.value = true
+  
+  const idsToSummarize = selectedIds.value.filter(id => {
+    const inspiration = inspirationStore.inspirations.find(i => i.id === id)
+    return regenerate || !inspiration?.summary
+  })
+  
+  let successCount = 0
+  let skipCount = selectedIds.value.length - idsToSummarize.length
+  
+  for (const id of idsToSummarize) {
+    try {
+      summarizingIds.value.add(id)
+      summarizeStatus.value.set(id, { status: 'loading', message: '正在生成总结...' })
+      await inspirationStore.summarizeInspiration(id)
+      summarizeStatus.value.set(id, { status: 'success', message: '总结生成成功！' })
+      successCount++
+    } catch (error) {
+      summarizeStatus.value.set(id, { status: 'error', message: '总结生成失败' })
+    }
+  }
+  
+  batchSummarizing.value = false
+  
+  if (skipCount > 0) {
+    alert(`已完成！成功: ${successCount}, 跳过(已有总结): ${skipCount}`)
+  } else {
+    alert(`已完成！成功: ${successCount}`)
+  }
+}
+
 const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
@@ -199,6 +447,22 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
     <div class="flex justify-between items-center">
       <h1 class="text-2xl font-bold text-gray-800">灵感库</h1>
       <div class="flex gap-2">
+        <button 
+          v-if="selectedIds.length > 0"
+          @click="handleBatchSummarize(false)"
+          :disabled="batchSummarizing"
+          class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+        >
+          {{ batchSummarizing ? '生成中...' : '批量生成总结' }} ({{ selectedIds.length }})
+        </button>
+        <button 
+          v-if="selectedIds.length > 0"
+          @click="handleBatchSummarize(true)"
+          :disabled="batchSummarizing"
+          class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+        >
+          {{ batchSummarizing ? '生成中...' : '批量重新生成总结' }} ({{ selectedIds.length }})
+        </button>
         <button 
           v-if="selectedIds.length > 0"
           @click="confirmBatchDelete"
@@ -249,20 +513,20 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
       
       <div class="flex space-x-4 mb-4">
         <button 
-          @click="addMode = 'upload'"
-          :class="['px-4 py-2 rounded-lg font-medium transition-colors', addMode === 'upload' ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']"
+          @click="addMode = 'file'"
+          :class="['px-4 py-2 rounded-lg font-medium transition-colors', addMode === 'file' ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']"
         >
           上传文件
         </button>
         <button 
-          @click="addMode = 'path'"
-          :class="['px-4 py-2 rounded-lg font-medium transition-colors', addMode === 'path' ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']"
+          @click="addMode = 'folder'"
+          :class="['px-4 py-2 rounded-lg font-medium transition-colors', addMode === 'folder' ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200']"
         >
-          文件路径
+          上传文件夹
         </button>
       </div>
       
-      <div v-if="addMode === 'upload'" class="space-y-4">
+      <div v-if="addMode === 'file'" class="space-y-4">
         <FileDropZone 
           ref="fileDropZone"
           multiple
@@ -292,25 +556,26 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
       </div>
       
       <div v-else class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">文件路径</label>
-          <input v-model="newInspiration.sourcePath" type="text" class="input-field" placeholder="输入文件或文件夹路径" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">名称（可选）</label>
-          <input v-model="newInspiration.name" type="text" class="input-field" placeholder="自定义名称" />
-        </div>
+        <FileDropZone 
+          ref="folderDropZone"
+          :multiple="false"
+          @files-selected="handleFilesSelected"
+        />
+        
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">标签（逗号分隔）</label>
           <input v-model="newInspiration.tags" type="text" class="input-field" placeholder="设计, UI, 参考" />
         </div>
-        <div class="flex items-center">
-          <input v-model="newInspiration.copyFile" type="checkbox" id="copyFile" class="mr-2" />
-          <label for="copyFile" class="text-sm text-gray-700">复制文件到项目存储</label>
-        </div>
+        
         <div class="flex justify-end space-x-3">
           <button @click="isAdding = false" class="btn-secondary">取消</button>
-          <button @click="handleAddInspiration" class="btn-primary">添加</button>
+          <button 
+            @click="handleUpload" 
+            :disabled="uploadingFiles.length === 0 || isUploading"
+            class="btn-primary disabled:opacity-50"
+          >
+            {{ isUploading ? '上传中...' : '上传' }}
+          </button>
         </div>
       </div>
     </div>
@@ -348,6 +613,15 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
             </div>
           </div>
           <div class="flex space-x-2" @click.stop>
+            <button 
+              @click="openEditModal(inspiration)" 
+              class="text-gray-500 hover:text-gray-700"
+              title="编辑"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
             <button 
               @click="handleSummarize(inspiration.id)" 
               :disabled="summarizingIds.has(inspiration.id)"
@@ -515,7 +789,25 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
               </div>
             </div>
             
-            <div v-if="selectedInspiration.summary" class="bg-gray-50 p-4 rounded-lg">
+            <div v-if="parsedSummary" class="bg-gray-50 p-4 rounded-lg space-y-4 text-sm">
+              <div>
+                <h4 class="font-bold text-gray-800 mb-2">文件夹结构</h4>
+                <pre class="text-xs font-mono bg-white p-2 rounded border overflow-x-auto whitespace-pre">{{ parsedSummary.tree }}</pre>
+              </div>
+              <div>
+                <h4 class="font-bold text-gray-800 mb-2">总体说明</h4>
+                <p class="text-gray-700 whitespace-pre-wrap">{{ parsedSummary.overview }}</p>
+              </div>
+              <div v-if="parsedSummary.important_docs">
+                <h4 class="font-bold text-gray-800 mb-2">重要文档说明</h4>
+                <p class="text-gray-700 whitespace-pre-wrap">{{ parsedSummary.important_docs }}</p>
+              </div>
+              <div v-if="parsedSummary.secondary_docs">
+                <h4 class="font-bold text-gray-800 mb-2">次要文档说明</h4>
+                <p class="text-gray-700 whitespace-pre-wrap">{{ parsedSummary.secondary_docs }}</p>
+              </div>
+            </div>
+            <div v-else-if="selectedInspiration.summary" class="bg-gray-50 p-4 rounded-lg">
               <p class="text-gray-700 whitespace-pre-wrap">{{ selectedInspiration.summary }}</p>
             </div>
             <div v-else class="bg-gray-50 p-4 rounded-lg text-center">
@@ -527,6 +819,25 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
               >
                 点击生成AI总结
               </button>
+            </div>
+          </div>
+          
+          <div v-if="selectedInspiration.type === 'folder' && selectedInspiration.metadata?.file_summaries && selectedInspiration.metadata.file_summaries.length > 0">
+            <h3 class="text-sm font-medium text-gray-500 mb-2">文件详情</h3>
+            <div class="bg-gray-50 p-3 rounded-lg max-h-[400px] overflow-y-auto space-y-3">
+              <div 
+                v-for="fs in selectedInspiration.metadata.file_summaries" 
+                :key="fs.path"
+                class="border border-gray-200 rounded-lg p-3 hover:bg-gray-100"
+              >
+                <div class="flex justify-between items-start mb-2">
+                  <div class="flex-1">
+                    <div class="text-sm font-medium text-gray-700">{{ fs.name }}</div>
+                    <div class="text-xs text-gray-400">{{ fs.path }}</div>
+                  </div>
+                </div>
+                <div class="text-sm text-gray-600 whitespace-pre-wrap">{{ fs.summary }}</div>
+              </div>
             </div>
           </div>
         </div>
@@ -561,6 +872,151 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
         <div class="flex justify-end space-x-3">
           <button @click="showBatchDeleteConfirm = false" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">取消</button>
           <button @click="handleBatchDelete" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">删除</button>
+        </div>
+      </div>
+    </div>
+    
+    <div v-if="showEditModal && editingInspiration" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-6 w-[800px] max-h-[85vh] overflow-y-auto">
+        <h3 class="text-lg font-semibold mb-4">编辑灵感</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">名称</label>
+            <input v-model="editForm.name" type="text" class="input-field" placeholder="灵感名称" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">标签（逗号分隔）</label>
+            <input v-model="editForm.tags" type="text" class="input-field" placeholder="设计, UI, 参考" />
+          </div>
+          
+          <div v-if="editingInspiration.type === 'folder'" class="border-t pt-4">
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-sm font-medium text-gray-700">忽略的文件/文件夹</label>
+              <span class="text-xs text-gray-500">勾选的项在生成AI总结时会被忽略</span>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3 max-h-[250px] overflow-y-auto">
+              <div v-if="folderTree.length === 0" class="text-gray-500 text-sm text-center py-4">
+                加载文件夹结构中...
+              </div>
+              <TreeNode 
+                v-else
+                v-for="node in folderTree" 
+                :key="node.path"
+                :node="node"
+                :ignored-paths="editForm.ignoredPaths"
+                @toggle-ignore="toggleIgnorePath"
+              />
+            </div>
+          </div>
+          
+          <div v-if="editingInspiration.type === 'folder'" class="border-t pt-4">
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-sm font-medium text-gray-700">文件总结</label>
+              <button 
+                @click="regenerateAllSummaries" 
+                :disabled="regeneratingSummaries"
+                class="text-sm text-primary-600 hover:text-primary-700 disabled:opacity-50"
+              >
+                {{ regeneratingSummaries ? '重新生成中...' : '全部重新生成' }}
+              </button>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-3 max-h-[300px] overflow-y-auto">
+              <div v-if="fileSummaries.length === 0" class="text-gray-500 text-sm text-center py-4">
+                {{ editForm.summary ? '已有总结，点击"全部重新生成"查看详情' : '请先生成AI总结' }}
+              </div>
+              <div v-else class="space-y-3">
+                <div 
+                  v-for="(fs, index) in fileSummaries" 
+                  :key="fs.path"
+                  class="border border-gray-200 rounded-lg p-3 hover:bg-gray-50"
+                >
+                  <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1">
+                      <div class="flex items-center space-x-2">
+                        <span 
+                          :class="[
+                            'text-sm font-medium',
+                            isIgnored(fs.path) ? 'text-gray-400 line-through' : 'text-gray-700'
+                          ]"
+                        >
+                          {{ fs.name }}
+                        </span>
+                        <span v-if="isIgnored(fs.path)" class="text-xs text-yellow-500 ml-2">
+                          (已忽略)
+                        </span>
+                      </div>
+                      <span class="text-xs text-gray-400">
+                        {{ fs.path }}
+                      </span>
+                    </div>
+                    <button 
+                      @click="regenerateSingleSummary(fs.path)"
+                      :disabled="regeneratingSingle === fs.path"
+                      class="text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50"
+                    >
+                      {{ regeneratingSingle === fs.path ? '生成中...' : '重新生成' }}
+                    </button>
+                  </div>
+                  <div class="text-sm text-gray-600 whitespace-pre-wrap">{{ fs.summary }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="editingInspiration.type !== 'folder' || !editForm.isStructured">
+            <label class="block text-sm font-medium text-gray-700 mb-1">AI总结</label>
+            <textarea 
+              v-model="editForm.summary" 
+              class="input-field min-h-[120px] resize-y" 
+              placeholder="AI总结内容..."
+            ></textarea>
+          </div>
+
+          <div v-if="editingInspiration.type === 'folder' && editForm.isStructured" class="space-y-4 border-t pt-4">
+             <div>
+               <div class="flex justify-between items-center mb-1">
+                 <label class="block text-sm font-medium text-gray-700">文件夹结构树</label>
+                 <button @click="regenerateSection('tree')" :disabled="regeneratingSections['tree']" class="text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50">
+                   {{ regeneratingSections['tree'] ? '生成中...' : '重新生成' }}
+                 </button>
+               </div>
+               <textarea v-model="editForm.folderTree" class="input-field min-h-[150px] font-mono text-xs whitespace-pre" placeholder="文件夹结构..."></textarea>
+             </div>
+             
+             <div>
+               <div class="flex justify-between items-center mb-1">
+                 <label class="block text-sm font-medium text-gray-700">总体说明</label>
+                 <button @click="regenerateSection('overview')" :disabled="regeneratingSections['overview']" class="text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50">
+                   {{ regeneratingSections['overview'] ? '生成中...' : '重新生成' }}
+                 </button>
+               </div>
+               <textarea v-model="editForm.folderOverview" class="input-field min-h-[100px]" placeholder="总体说明..."></textarea>
+             </div>
+             
+             <div>
+               <div class="flex justify-between items-center mb-1">
+                 <label class="block text-sm font-medium text-gray-700">重要文档说明</label>
+                 <button @click="regenerateSection('important_docs')" :disabled="regeneratingSections['important_docs']" class="text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50">
+                   {{ regeneratingSections['important_docs'] ? '生成中...' : '重新生成' }}
+                 </button>
+               </div>
+               <textarea v-model="editForm.folderImportant" class="input-field min-h-[100px]" placeholder="重要文档说明..."></textarea>
+             </div>
+
+             <div>
+               <div class="flex justify-between items-center mb-1">
+                 <label class="block text-sm font-medium text-gray-700">次要文档说明</label>
+                 <button @click="regenerateSection('secondary_docs')" :disabled="regeneratingSections['secondary_docs']" class="text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50">
+                   {{ regeneratingSections['secondary_docs'] ? '生成中...' : '重新生成' }}
+                 </button>
+               </div>
+               <textarea v-model="editForm.folderSecondary" class="input-field min-h-[100px]" placeholder="次要文档说明..."></textarea>
+             </div>
+          </div>
+        </div>
+        <div class="flex justify-end space-x-3 mt-6">
+          <button @click="showEditModal = false" class="btn-secondary">取消</button>
+          <button @click="handleEditSave" class="btn-primary">保存</button>
         </div>
       </div>
     </div>

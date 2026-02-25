@@ -261,8 +261,8 @@ const regenerateSection = async (section: string) => {
     // Update the corresponding field in editForm
     if (section === 'tree') editForm.value.folderTree = response
     else if (section === 'overview') editForm.value.folderOverview = response
-    else if (section === 'important_docs') editForm.value.folderImportant = response
-    else if (section === 'secondary_docs') editForm.value.folderSecondary = response
+    // else if (section === 'important_docs') editForm.value.folderImportant = response
+    // else if (section === 'secondary_docs') editForm.value.folderSecondary = response
     
     // Also update the summary JSON in editForm so it stays in sync
     try {
@@ -306,16 +306,16 @@ const handleEditSave = async () => {
         const parsed = JSON.parse(summary || '{}')
         parsed.tree = editForm.value.folderTree
         parsed.overview = editForm.value.folderOverview
-        parsed.important_docs = editForm.value.folderImportant
-        parsed.secondary_docs = editForm.value.folderSecondary
+        // parsed.important_docs = editForm.value.folderImportant
+        // parsed.secondary_docs = editForm.value.folderSecondary
         summary = JSON.stringify(parsed, null, 2)
       } catch (e) {
         // Fallback if parsing fails, though it shouldn't if it was structured
         const newStruct = {
           tree: editForm.value.folderTree,
           overview: editForm.value.folderOverview,
-          important_docs: editForm.value.folderImportant,
-          secondary_docs: editForm.value.folderSecondary
+          // important_docs: editForm.value.folderImportant,
+          // secondary_docs: editForm.value.folderSecondary
         }
         summary = JSON.stringify(newStruct, null, 2)
       }
@@ -798,14 +798,6 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
                 <h4 class="font-bold text-gray-800 mb-2">总体说明</h4>
                 <p class="text-gray-700 whitespace-pre-wrap">{{ parsedSummary.overview }}</p>
               </div>
-              <div v-if="parsedSummary.important_docs">
-                <h4 class="font-bold text-gray-800 mb-2">重要文档说明</h4>
-                <p class="text-gray-700 whitespace-pre-wrap">{{ parsedSummary.important_docs }}</p>
-              </div>
-              <div v-if="parsedSummary.secondary_docs">
-                <h4 class="font-bold text-gray-800 mb-2">次要文档说明</h4>
-                <p class="text-gray-700 whitespace-pre-wrap">{{ parsedSummary.secondary_docs }}</p>
-              </div>
             </div>
             <div v-else-if="selectedInspiration.summary" class="bg-gray-50 p-4 rounded-lg">
               <p class="text-gray-700 whitespace-pre-wrap">{{ selectedInspiration.summary }}</p>
@@ -991,26 +983,6 @@ const getTypeDisplayName = (type: string) => fileTypeStore.getTypeDisplayName(ty
                  </button>
                </div>
                <textarea v-model="editForm.folderOverview" class="input-field min-h-[100px]" placeholder="总体说明..."></textarea>
-             </div>
-             
-             <div>
-               <div class="flex justify-between items-center mb-1">
-                 <label class="block text-sm font-medium text-gray-700">重要文档说明</label>
-                 <button @click="regenerateSection('important_docs')" :disabled="regeneratingSections['important_docs']" class="text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50">
-                   {{ regeneratingSections['important_docs'] ? '生成中...' : '重新生成' }}
-                 </button>
-               </div>
-               <textarea v-model="editForm.folderImportant" class="input-field min-h-[100px]" placeholder="重要文档说明..."></textarea>
-             </div>
-
-             <div>
-               <div class="flex justify-between items-center mb-1">
-                 <label class="block text-sm font-medium text-gray-700">次要文档说明</label>
-                 <button @click="regenerateSection('secondary_docs')" :disabled="regeneratingSections['secondary_docs']" class="text-xs text-primary-600 hover:text-primary-700 disabled:opacity-50">
-                   {{ regeneratingSections['secondary_docs'] ? '生成中...' : '重新生成' }}
-                 </button>
-               </div>
-               <textarea v-model="editForm.folderSecondary" class="input-field min-h-[100px]" placeholder="次要文档说明..."></textarea>
              </div>
           </div>
         </div>

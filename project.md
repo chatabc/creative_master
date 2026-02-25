@@ -180,18 +180,20 @@ creative_master/
 
 ## 启动方式
 
-### 后端
-```bash
-cd creative_master
-python -m uvicorn backend.main:app --port 8002 --reload
+### 后端 (端口 8002)
+```powershell
+Set-Location d:\python_project\creative_master; python -m uvicorn backend.main:app --port 8002 --reload
 ```
 
-### 前端
-```bash
-cd creative_master/frontend
-npm install
-npm run dev -- --port 3001
+### 前端 (端口 3001)
+```powershell
+Set-Location d:\python_project\creative_master\frontend; D:\fnm\node-versions\v24.13.1\installation\node.exe node_modules/vite/bin/vite.js --port 3001
 ```
+
+### 访问地址
+- 前端界面: http://localhost:3001
+- 后端 API: http://127.0.0.1:8002
+- API 文档: http://127.0.0.1:8002/docs
 
 ## 开发历史
 

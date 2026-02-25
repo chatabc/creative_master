@@ -650,6 +650,128 @@ async def regenerate_folder_summaries(inspiration_id: str):
     return result
 
 
+class RegenerateNodeRequest(BaseModel):
+    node_path: str
+
+
+@router.post("/inspirations/{inspiration_id}/regenerate-node")
+async def regenerate_node_summary(inspiration_id: str, request: RegenerateNodeRequest):
+    inspiration = inspiration_manager.get_inspiration(inspiration_id)
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
+    
+    if inspiration.type != "folder":
+        raise HTTPException(status_code=400, detail="Not a folder type inspiration")
+    
+    from ..core import ai_summarizer
+    
+    summarizer = ai_summarizer.get_summarizer(inspiration.type)
+    if not summarizer:
+        raise HTTPException(status_code=400, detail="No AI model configured for this type")
+    
+    ignored_paths = inspiration.metadata.get('ignored_paths', [])
+    
+    result = await summarizer.regenerate_node_summary(
+        inspiration.path,
+        request.node_path,
+        ignored_paths=ignored_paths
+    )
+    
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    file_summaries = inspiration.metadata.get('file_summaries', [])
+    
+    def update_summaries(existing_summaries: List[Dict], new_result: Dict, root_path: str = "") -> List[Dict]:
+        new_path = new_result.get("path", "")
+        updated = False
+        new_list = []
+        
+        for item in existing_summaries:
+            if item.get("path") == new_path:
+                new_list.append({
+                    "path": new_path,
+                    "name": new_result.get("name", ""),
+                    "type": new_result.get("type", ""),
+                    "summary": new_result.get("summary", "")
+                })
+                updated = True
+            else:
+                new_list.append(item)
+        
+        if not updated and new_path is not None:
+            new_list.append({
+                "path": new_path,
+                "name": new_result.get("name", ""),
+                "type": new_result.get("type", ""),
+                "summary": new_result.get("summary", "")
+            })
+        
+        for child in new_result.get("children", []):
+            new_list = update_summaries(new_list, child)
+        
+        return new_list
+    
+    file_summaries = update_summaries(file_summaries, result)
+    
+    inspiration_manager.update_inspiration(
+        inspiration_id,
+        metadata={
+            **inspiration.metadata,
+            "file_summaries": file_summaries
+        }
+    )
+    
+    return result
+
+
+class UpdateNodeSummaryRequest(BaseModel):
+    node_path: str
+    summary: str
+
+
+@router.post("/inspirations/{inspiration_id}/update-node-summary")
+async def update_node_summary(inspiration_id: str, request: UpdateNodeSummaryRequest):
+    inspiration = inspiration_manager.get_inspiration(inspiration_id)
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
+    
+    if inspiration.type != "folder":
+        raise HTTPException(status_code=400, detail="Not a folder type inspiration")
+    
+    file_summaries = inspiration.metadata.get('file_summaries', [])
+    
+    updated = False
+    new_summaries = []
+    for item in file_summaries:
+        if item.get("path") == request.node_path:
+            new_summaries.append({
+                **item,
+                "summary": request.summary
+            })
+            updated = True
+        else:
+            new_summaries.append(item)
+    
+    if not updated:
+        new_summaries.append({
+            "path": request.node_path,
+            "name": Path(request.node_path).name if request.node_path else "",
+            "type": "folder" if "/" in (request.node_path or "") or "\\" in (request.node_path or "") else "file",
+            "summary": request.summary
+        })
+    
+    inspiration_manager.update_inspiration(
+        inspiration_id,
+        metadata={
+            **inspiration.metadata,
+            "file_summaries": new_summaries
+        }
+    )
+    
+    return {"status": "success", "path": request.node_path}
+
+
 class AICompleteRelationsRequest(BaseModel):
     inspiration_ids: List[str]
     existing_relations: Optional[List[Dict]] = None

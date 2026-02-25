@@ -15,3 +15,7 @@
 | 2026-02-24 | 递归总结返回空 | 递归逻辑中对相对路径的处理可能有误，导致根目录被误判或忽略 | 优化路径处理逻辑，增加日志输出，并确保根目录即使无子内容也能返回基本结构 |
 | 2026-02-24 | NameError: name 'asyncio' is not defined | ai_summarizer.py 中 summarize 方法内部 import asyncio 被移动位置或作用域问题导致 _summarize_recursive 无法访问 | 确保 asyncio 在方法顶部正确导入，或在模块级别导入（本次修复是在方法内部调整导入位置） |
 | 2026-02-24 | NameError: name 'asyncio' is not defined (again) | 虽然在 summarize 中导入了 asyncio，但 _summarize_recursive 是独立方法，仍无法访问 | 在 _summarize_recursive 方法内部显式导入 asyncio |
+| 2026-02-24 | 总结逻辑简化 | 用户要求移除"重要文档"和"次要文档"分类，仅保留递归总结 | 修改 ai_summarizer.py 和 InspirationsView.vue，移除相关逻辑和 UI 显示 |
+| 2026-02-24 | 文件夹内容未被正确识别 | English文件夹内有文件，但总结显示为空或被忽略 | 在 ai_summarizer.py 中添加详细的 DEBUG 日志，追踪文件识别和处理过程 |
+| 2026-02-25 | npm/pnpm 命令未找到 | 系统未安装 Node.js 环境 | 需要安装 Node.js 18+ 版本，下载地址: https://nodejs.org/ |
+| 2026-02-25 | 'FolderSummarizer' object has no attribute '_get_file_importance' | FolderSummarizer 类中调用了 _get_file_importance 方法但未定义 | 在 ai_summarizer.py 的 FolderSummarizer 类中添加 _get_file_importance 方法定义 |

@@ -271,10 +271,13 @@ class FolderSummarizer(BaseSummarizer):
         ignored_paths = ignored_paths or []
         
         def is_ignored(item_path: Path) -> bool:
-            relative = str(item_path.relative_to(folder_path))
-            for ignored in ignored_paths:
-                if relative == ignored or relative.startswith(ignored + '/'):
-                    return True
+            try:
+                relative = str(item_path.relative_to(folder_path))
+                for ignored in ignored_paths:
+                    if relative == ignored or relative.startswith(ignored + '/'):
+                        return True
+            except ValueError:
+                pass
             return False
         
         structure_lines = []
@@ -292,89 +295,170 @@ class FolderSummarizer(BaseSummarizer):
                     if sub_structure:
                         structure_lines.append(sub_structure)
                 else:
-                    # size = item.stat().st_size
-                    # if size < 1024:
-                    #     size_str = f"{size}B"
-                    # elif size < 1024 * 1024:
-                    #     size_str = f"{size / 1024:.1f}KB"
-                    # else:
-                    #     size_str = f"{size / (1024 * 1024):.1f}MB"
-                    # structure_lines.append(f"{indent}- {item.name} ({size_str})")
                     structure_lines.append(f"{indent}- {item.name}")
         except PermissionError:
             pass
         
         return "\n".join(structure_lines)
     
-    def _get_file_importance(self, file_path: Path) -> int:
-        important_names = ['readme', 'main', 'index', 'app', 'config', 'setup', 'requirements', 'package']
-        secondary_exts = ['.log', '.tmp', '.bak', '.swp']
-        
-        name_lower = file_path.name.lower()
-        
-        for ext in secondary_exts:
-            if name_lower.endswith(ext):
-                return 0
-        
-        for important in important_names:
-            if important in name_lower:
-                return 2
-        
-        if file_path.suffix in ['.py', '.js', '.ts', '.vue', '.jsx', '.tsx', '.java', '.go', '.rs', '.cpp', '.c', '.h']:
-            return 1
-        if file_path.suffix in ['.md', '.txt', '.rst', '.doc', '.docx', '.pdf']:
-            return 1
-        if file_path.suffix in ['.json', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.env']:
-            return 1
-        
-        return 0
-    
-    def _read_file_content(self, file_path: Path, max_length: int = 3000) -> str:
+    def _get_file_info(self, file_path: Path) -> Dict[str, Any]:
         try:
-            if file_path.suffix.lower() == '.docx':
+            stat = file_path.stat()
+            size = stat.st_size
+            size_str = f"{size}B" if size < 1024 else f"{size/1024:.1f}KB" if size < 1024*1024 else f"{size/(1024*1024):.1f}MB"
+            return {
+                "size": size,
+                "size_str": size_str,
+                "extension": file_path.suffix.lower(),
+                "modified": stat.st_mtime
+            }
+        except Exception:
+            return {"size": 0, "size_str": "unknown", "extension": file_path.suffix.lower(), "modified": 0}
+    
+    def _read_file_content(self, file_path: Path, max_length: int = 6000) -> str:
+        try:
+            suffix = file_path.suffix.lower()
+            
+            if suffix == '.docx':
                 try:
                     from docx import Document
                     doc = Document(str(file_path))
                     content = []
-                    for para in doc.paragraphs[:20]:
+                    for para in doc.paragraphs[:30]:
                         if para.text.strip():
                             content.append(para.text)
                     return '\n'.join(content)[:max_length]
-                except Exception:
-                    return ""
-            elif file_path.suffix.lower() == '.pdf':
+                except Exception as e:
+                    return f"[Word文档解析失败: {str(e)}]"
+            
+            elif suffix == '.pdf':
                 try:
                     from PyPDF2 import PdfReader
                     reader = PdfReader(str(file_path))
                     content = []
-                    for page in reader.pages[:5]:
+                    for page in reader.pages[:10]:
                         text = page.extract_text()
                         if text and text.strip():
                             content.append(text)
                     return '\n'.join(content)[:max_length]
-                except Exception:
-                    return ""
+                except Exception as e:
+                    return f"[PDF解析失败: {str(e)}]"
+            
+            elif suffix in ['.xlsx', '.xls']:
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(str(file_path), read_only=True)
+                    content = []
+                    for sheet_name in wb.sheetnames[:3]:
+                        sheet = wb[sheet_name]
+                        content.append(f"=== Sheet: {sheet_name} ===")
+                        for row in list(sheet.iter_rows(max_row=20, values_only=True)):
+                            if any(cell for cell in row if cell):
+                                content.append(' | '.join(str(cell) if cell else '' for cell in row))
+                    return '\n'.join(content)[:max_length]
+                except Exception as e:
+                    return f"[Excel解析失败: {str(e)}]"
+            
+            elif suffix in ['.pptx', '.ppt']:
+                try:
+                    from pptx import Presentation
+                    prs = Presentation(str(file_path))
+                    content = []
+                    for i, slide in enumerate(prs.slides[:10]):
+                        content.append(f"=== Slide {i+1} ===")
+                        for shape in slide.shapes:
+                            if hasattr(shape, "text") and shape.text.strip():
+                                content.append(shape.text)
+                    return '\n'.join(content)[:max_length]
+                except Exception as e:
+                    return f"[PPT解析失败: {str(e)}]"
+            
+            elif suffix in ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a']:
+                info = self._get_file_info(file_path)
+                return f"[音频文件: {info['size_str']}, 格式: {suffix}]"
+            
+            elif suffix in ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm']:
+                info = self._get_file_info(file_path)
+                return f"[视频文件: {info['size_str']}, 格式: {suffix}]"
+            
+            elif suffix in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.ico', '.tiff']:
+                info = self._get_file_info(file_path)
+                return f"[图片文件: {info['size_str']}, 格式: {suffix}]"
+            
+            elif suffix in ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2']:
+                info = self._get_file_info(file_path)
+                return f"[压缩文件: {info['size_str']}, 格式: {suffix}]"
+            
+            elif suffix in ['.pt', '.pth', '.h5', '.hdf5', '.onnx', '.pb', '.safetensors', '.bin', '.ckpt', '.pkl']:
+                info = self._get_file_info(file_path)
+                return f"[模型文件: {info['size_str']}, 格式: {suffix}]"
+            
+            elif suffix in ['.exe', '.dll', '.so', '.dylib', '.bin']:
+                info = self._get_file_info(file_path)
+                return f"[二进制文件: {info['size_str']}, 格式: {suffix}]"
+            
             else:
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    return f.read()[:max_length]
-        except Exception:
-            return ""
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                        if not content.strip():
+                            info = self._get_file_info(file_path)
+                            return f"[空文件或二进制: {info['size_str']}]"
+                        return content[:max_length]
+                except Exception:
+                    info = self._get_file_info(file_path)
+                    return f"[文件读取失败: {info['size_str']}, 格式: {suffix}]"
+                    
+        except Exception as e:
+            return f"[文件处理错误: {str(e)}]"
+    
+    def _get_file_importance(self, file_path: Path) -> str:
+        name = file_path.name.lower()
+        parent = file_path.parent.name.lower() if file_path.parent else ""
+        
+        important_names = ['readme', 'main', 'index', 'app', 'config', 'setup', 
+                          'requirements', 'package', 'cargo', 'go.mod', 'pom',
+                          'build', 'makefile', 'dockerfile', 'docker-compose']
+        important_dirs = ['src', 'lib', 'core', 'main', 'app', 'api']
+        
+        if any(imp in name for imp in important_names):
+            return "important"
+        if parent in important_dirs:
+            return "important"
+        if name.startswith('test') or name.startswith('spec'):
+            return "secondary"
+        if file_path.suffix.lower() in ['.md', '.txt', '.rst', '.doc', '.docx', '.pdf']:
+            return "important"
+        
+        return "normal"
     
     async def _summarize_file(self, client, file_path: Path, relative_path: str, content: str) -> str:
-        if not content.strip():
-            return ""
-        
         try:
+            suffix = file_path.suffix.lower()
+            
+            if content.startswith('[') and content.endswith(']'):
+                prompt = f"""文件: {relative_path}
+文件信息: {content}
+
+请简要描述这个文件的类型和用途（1-2句话）。"""
+            else:
+                prompt = f"""文件: {relative_path}
+
+内容:
+{content[:3000]}
+
+请分析这个文件的内容并总结其功能和用途（2-3句话）。"""
+            
             response = await client.chat.completions.create(
                 model=self.config.model_name,
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是一个文件分析专家，请简要分析文件内容并总结其功能和用途。用2-3句话描述。"
+                        "content": "你是一个文件分析专家，请简要分析文件内容并总结其功能和用途。"
                     },
                     {
                         "role": "user",
-                        "content": f"文件: {relative_path}\n\n内容:\n{content[:2000]}"
+                        "content": prompt
                     }
                 ],
                 max_tokens=300
@@ -382,7 +466,7 @@ class FolderSummarizer(BaseSummarizer):
             return response.choices[0].message.content
         except Exception as e:
             print(f"Error summarizing file {relative_path}: {e}")
-            return ""
+            return f"[总结失败: {str(e)}]"
     
     async def _summarize_recursive(self, current_path: Path, root_path: Path, client, semaphore, ignored_paths: List[str]) -> Dict[str, Any]:
         import asyncio
@@ -394,33 +478,32 @@ class FolderSummarizer(BaseSummarizer):
                 relative_path = str(current_path.relative_to(root_path)).replace('\\', '/')
         except ValueError:
             relative_path = current_path.name
-            
-        # Check ignore
-        if relative_path:
+        
+        def is_ignored(path_to_check: str) -> bool:
+            if not path_to_check:
+                return False
             for ignored in ignored_paths:
-                if relative_path == ignored or relative_path.startswith(ignored + '/'):
-                    print(f"Skipping ignored path: {relative_path}")
-                    return None
+                if path_to_check == ignored or path_to_check.startswith(ignored + '/'):
+                    return True
+            return False
+        
+        if is_ignored(relative_path):
+            print(f"Skipping ignored path: {relative_path}")
+            return None
 
-        # If file
         if current_path.is_file():
-            # Skip binary or system files
-            if current_path.name.startswith('.') or current_path.name in ['package-lock.json', 'yarn.lock', '.DS_Store']:
+            if current_path.name.startswith('.') or current_path.name in ['package-lock.json', 'yarn.lock', '.DS_Store', 'Thumbs.db']:
+                print(f"DEBUG: Skipping system file {current_path.name}")
                 return None
                 
             async with semaphore:
                 try:
-                    print(f"Processing file: {relative_path}")
+                    print(f"DEBUG: Processing file: {relative_path}")
                     content = self._read_file_content(current_path, max_length=6000)
-                    if not content or not content.strip():
-                        print(f"Skipping empty file: {relative_path}")
-                        return None
                     
                     summary = await self._summarize_file(client, current_path, relative_path, content)
-                    if not summary:
-                        print(f"Failed to summarize file: {relative_path}")
-                        return None
-                        
+                    
+                    print(f"DEBUG: Successfully summarized file: {relative_path}")
                     return {
                         "path": relative_path,
                         "name": current_path.name,
@@ -429,24 +512,39 @@ class FolderSummarizer(BaseSummarizer):
                         "importance": self._get_file_importance(current_path)
                     }
                 except Exception as e:
-                    print(f"Error summarizing file {current_path}: {e}")
+                    print(f"DEBUG: Error summarizing file {current_path}: {e}")
                     return None
 
-        # If directory
         if current_path.is_dir():
-            print(f"Processing directory: {relative_path if relative_path else 'ROOT'}")
-            tasks = []
+            print(f"DEBUG: Processing directory: {relative_path if relative_path else 'ROOT'}")
+            
+            direct_children = []
             try:
-                # List items
                 items = sorted(current_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower()))
+                print(f"DEBUG: Found {len(items)} items in {current_path.name}")
+                
                 for item in items:
                     if item.name.startswith('.') or item.name in ['node_modules', '__pycache__', '.git', 'dist', 'build', 'venv', '.venv']:
+                        print(f"DEBUG: Skipping excluded item: {item.name}")
                         continue
-                    tasks.append(self._summarize_recursive(item, root_path, client, semaphore, ignored_paths))
+                    
+                    try:
+                        if current_path == root_path:
+                            item_relative = item.name
+                        else:
+                            item_relative = f"{relative_path}/{item.name}"
+                    except Exception:
+                        item_relative = item.name
+                    
+                    if is_ignored(item_relative):
+                        print(f"DEBUG: Skipping ignored item: {item_relative}")
+                        continue
+                    
+                    direct_children.append(item)
                 
-                if not tasks:
-                     print(f"Empty directory: {relative_path}")
-                     return {
+                if not direct_children:
+                    print(f"DEBUG: No valid children for directory: {relative_path}")
+                    return {
                         "path": relative_path,
                         "name": current_path.name,
                         "type": "folder",
@@ -454,45 +552,58 @@ class FolderSummarizer(BaseSummarizer):
                         "children": []
                     }
 
-                results = await asyncio.gather(*tasks)
+                child_tasks = [
+                    self._summarize_recursive(item, root_path, client, semaphore, ignored_paths)
+                    for item in direct_children
+                ]
+                
+                results = await asyncio.gather(*child_tasks)
                 children = [r for r in results if r is not None]
+                print(f"DEBUG: Got {len(children)} valid children for {current_path.name}")
                 
                 if not children:
-                    print(f"No children summaries for directory: {relative_path}")
-                    # Even if no children, we should return the folder itself if it's the root
+                    print(f"DEBUG: No children summaries for directory: {relative_path}")
                     if current_path == root_path:
-                         return {
+                        return {
                             "path": relative_path,
                             "name": current_path.name,
                             "type": "folder",
                             "summary": "文件夹为空或所有内容被忽略",
                             "children": []
                         }
-                    return None # Empty or all ignored
+                    return None
                 
-                # Generate folder summary based on children
-                children_summaries = "\n".join([f"- [{child['type'].upper()}] {child['name']}: {child.get('summary', '')[:100]}..." for child in children])
+                direct_children_summaries = []
+                for child in children:
+                    child_summary = child.get('summary', '')[:150]
+                    direct_children_summaries.append(
+                        f"- [{child['type'].upper()}] {child['name']}: {child_summary}"
+                    )
                 
-                # Truncate if too long
-                if len(children_summaries) > 10000:
-                     children_summaries = children_summaries[:10000] + "\n...(truncated)"
+                children_info = "\n".join(direct_children_summaries)
+                
+                if len(children_info) > 8000:
+                    children_info = children_info[:8000] + "\n...(内容已截断)"
                 
                 async with semaphore:
                     prompt = f"""请总结以下文件夹的内容。
-                    
+
 文件夹路径: {relative_path if relative_path else "Root"}
 
-包含的内容摘要:
-{children_summaries}
+该文件夹包含以下直接子项（文件和子文件夹）:
+{children_info}
 
-请生成一个简洁的文件夹总结（200字以内），概括该文件夹的主要功能、包含的核心模块以及它们之间的关系。"""
-                    
+请生成一个简洁的文件夹总结（150-200字），概括：
+1. 该文件夹的主要用途
+2. 包含的主要内容类型
+3. 各子项之间的关系（如果有）"""
+
                     try:
                         print(f"Generating summary for directory: {relative_path if relative_path else 'ROOT'}")
                         response = await client.chat.completions.create(
                             model=self.config.model_name,
                             messages=[
-                                {"role": "system", "content": "你是一个项目架构分析专家。"},
+                                {"role": "system", "content": "你是一个项目架构分析专家，擅长总结文件夹结构和内容。"},
                                 {"role": "user", "content": prompt}
                             ],
                             max_tokens=500
@@ -510,8 +621,8 @@ class FolderSummarizer(BaseSummarizer):
                     "children": children
                 }
             except Exception as e:
-                 print(f"Error processing directory {current_path}: {e}")
-                 return None
+                print(f"Error processing directory {current_path}: {e}")
+                return None
         
         return None
 
@@ -573,7 +684,6 @@ class FolderSummarizer(BaseSummarizer):
                 "path": node['path'],
                 "name": node['name'],
                 "summary": node['summary'],
-                "importance": "important" if node.get('importance', 0) > 0 else "secondary", # Folders are secondary by default unless we change logic
                 "type": node['type']
             })
             if node.get('children'):
@@ -588,59 +698,14 @@ class FolderSummarizer(BaseSummarizer):
         # Overview is the root folder summary
         overview = root_summary.get('summary', '')
         
-        # Important docs: filtered from flat list
-        important_nodes = [n for n in flat_summaries if n['type'] == 'file' and n.get('importance') == 'important']
-        if important_nodes:
-             # Generate specific description for important docs
-             important_prompt = f"""请根据以下重要文件的摘要，生成一份“重要文档说明”。
-            
-重要文件摘要：
-{json.dumps([{'path': fs['path'], 'summary': fs['summary']} for fs in important_nodes[:20]], ensure_ascii=False, indent=2)}
-
-请详细说明这些核心文件的作用和它们之间的关系。"""
-             try:
-                resp = await client.chat.completions.create(
-                    model=self.config.model_name,
-                    messages=[{"role": "user", "content": important_prompt}],
-                    max_tokens=1000
-                )
-                important_docs_desc = resp.choices[0].message.content
-             except:
-                important_docs_desc = "生成失败"
-        else:
-            important_docs_desc = "未发现重要文档。"
-
-        # Secondary docs
-        secondary_nodes = [n for n in flat_summaries if n['type'] == 'file' and n.get('importance') == 'secondary']
-        if secondary_nodes:
-             # Generate specific description for secondary docs
-             secondary_prompt = f"""请根据以下次要文件的摘要，生成一份“次要文档说明”。
-            
-次要文件摘要：
-{json.dumps([{'path': fs['path'], 'summary': fs['summary']} for fs in secondary_nodes[:20]], ensure_ascii=False, indent=2)}
-
-请简要说明这些文件的作用。"""
-             try:
-                resp = await client.chat.completions.create(
-                    model=self.config.model_name,
-                    messages=[{"role": "user", "content": secondary_prompt}],
-                    max_tokens=1000
-                )
-                secondary_docs_desc = resp.choices[0].message.content
-             except:
-                secondary_docs_desc = "生成失败"
-        else:
-            secondary_docs_desc = "未发现次要文档。"
-            
-        # Construct Result
+        # Construct Result - Simplified as requested
         result = {
             "tree": tree_structure,
             "overview": overview,
-            "important_docs": important_docs_desc,
-            "secondary_docs": secondary_docs_desc,
+            "important_docs": "", # Removed as requested
+            "secondary_docs": "", # Removed as requested
             "_context": {
                 "file_summaries": flat_summaries,
-                # "root_summary_structure": root_summary # Optional: store full structure
             }
         }
         
@@ -731,36 +796,62 @@ class FolderSummarizer(BaseSummarizer):
         client = AsyncOpenAI(
             api_key=self.config.api_key,
             base_url=self.config.base_url,
-            timeout=60.0
+            timeout=120.0
         )
         
         path = Path(folder_path)
-        target_path = path / file_path
+        target_path = path / file_path if file_path else path
         
         if not target_path.exists():
             return "文件/文件夹不存在"
         
         ignored_paths = ignored_paths or []
-        sem = asyncio.Semaphore(5)
+        sem = asyncio.Semaphore(10)
         
         if target_path.is_file():
             try:
                 content = self._read_file_content(target_path, max_length=6000)
-                if not content or not content.strip():
-                    return "文件内容为空"
-                
                 return await self._summarize_file(client, target_path, file_path, content)
             except Exception as e:
                 return f"总结失败: {str(e)}"
-             
+         
         elif target_path.is_dir():
-            # Summarize folder recursively
-            # Note: root_path passed to _summarize_recursive should be the main folder_path 
-            # so relative paths are correct relative to the inspiration root.
             result = await self._summarize_recursive(target_path, path, client, sem, ignored_paths)
             return result.get('summary', '') if result else "无法生成总结"
             
         return "未知类型"
+    
+    async def regenerate_node_summary(self, folder_path: str, node_path: str, ignored_paths: List[str] = None) -> Dict[str, Any]:
+        from openai import AsyncOpenAI
+        import asyncio
+        
+        client = AsyncOpenAI(
+            api_key=self.config.api_key,
+            base_url=self.config.base_url,
+            timeout=120.0
+        )
+        
+        path = Path(folder_path)
+        target_path = path / node_path if node_path else path
+        
+        if not target_path.exists():
+            return {"error": "文件/文件夹不存在"}
+        
+        ignored_paths = ignored_paths or []
+        sem = asyncio.Semaphore(10)
+        
+        result = await self._summarize_recursive(target_path, path, client, sem, ignored_paths)
+        
+        if result:
+            return {
+                "path": result.get("path", ""),
+                "name": result.get("name", ""),
+                "type": result.get("type", ""),
+                "summary": result.get("summary", ""),
+                "children": result.get("children", [])
+            }
+        
+        return {"error": "无法生成总结"}
 
 
 class TextContentSummarizer(BaseSummarizer):

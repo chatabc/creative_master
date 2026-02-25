@@ -135,7 +135,27 @@ npm install
 
 ### 启动服务
 
-#### 方式一：使用启动脚本（推荐）
+#### 方式一：手动启动（推荐）
+
+**启动后端（端口 8002）**
+
+```powershell
+Set-Location <你的项目路径>; python -m uvicorn backend.main:app --port 8002 --reload
+```
+
+**启动前端（端口 3001）**
+
+```powershell
+Set-Location <你的项目路径>\frontend; <你的Node.js路径> node_modules/vite/bin/vite.js --port 3001
+```
+
+> ⚠️ **注意**：请将 `<你的项目路径>` 和 `<你的Node.js路径>` 替换为你本地的实际路径。
+> 
+> 例如：
+> - 项目路径：`D:\python_project\creative_master`
+> - Node.js路径：`D:\fnm\node-versions\v24.13.1\installation\node.exe`
+
+#### 方式二：使用启动脚本
 
 **Windows:**
 ```bash
@@ -156,21 +176,6 @@ chmod +x start_linux.sh
 ```
 
 启动脚本会自动打开两个终端窗口分别运行前后端，并在启动完成后自动打开浏览器。
-
-#### 方式二：手动启动
-
-**启动后端（端口 8002）**
-
-```bash
-python -m uvicorn backend.main:app --port 8002 --reload
-```
-
-**启动前端（端口 3001）**
-
-```bash
-cd frontend
-npm run dev -- --port 3001
-```
 
 #### 访问应用
 
